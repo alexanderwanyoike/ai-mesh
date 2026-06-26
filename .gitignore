@@ -1,0 +1,4 @@
+ai-mesh
+*.exe
+*.glb
+dist/
