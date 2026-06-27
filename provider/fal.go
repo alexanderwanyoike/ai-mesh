@@ -110,9 +110,11 @@ func (f *Fal) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResp
 		return nil, fmt.Errorf("fetching result: %w", err)
 	}
 
-	url := result.ModelGLB.URL
+	// Prefer the dedicated GLB url. model_glb is polymorphic - on some tiers
+	// (e.g. rapid) it can point at an OBJ - whereas model_urls.glb is always GLB.
+	url := result.ModelURLs.GLB.URL
 	if url == "" {
-		url = result.ModelURLs.GLB.URL
+		url = result.ModelGLB.URL
 	}
 	if url == "" {
 		return nil, fmt.Errorf("fal response had no GLB URL")
