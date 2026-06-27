@@ -1,5 +1,5 @@
-// Package config persists ai-mesh settings (API keys) to a JSON file under the
-// user's config directory, so keys do not have to live in the shell environment.
+// Package config persists ai-mesh settings (API keys) to a JSON file in the
+// user's home directory, so keys do not have to live in the shell environment.
 package config
 
 import (
@@ -15,16 +15,16 @@ type Config struct {
 	Keys map[string]string `json:"keys"`
 }
 
-// userConfigDir is indirected so tests can point it at a temp directory.
-var userConfigDir = os.UserConfigDir
+// userHomeDir is indirected so tests can point it at a temp directory.
+var userHomeDir = os.UserHomeDir
 
-// Path returns the config file location (e.g. ~/.config/ai-mesh/config.json).
+// Path returns the config file location (~/.ai-mesh/config.json).
 func Path() (string, error) {
-	dir, err := userConfigDir()
+	home, err := userHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("locating config dir: %w", err)
+		return "", fmt.Errorf("locating home dir: %w", err)
 	}
-	return filepath.Join(dir, "ai-mesh", "config.json"), nil
+	return filepath.Join(home, ".ai-mesh", "config.json"), nil
 }
 
 // Load reads the config file. A missing file is not an error; it returns an

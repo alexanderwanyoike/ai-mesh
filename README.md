@@ -67,8 +67,7 @@ one, resolved in this order of precedence:
    ai-mesh config set meshy "your-meshy-key"
    ```
 
-The config file is stored at `~/.config/ai-mesh/config.json` (per `os.UserConfigDir`)
-with `0600` permissions.
+The config file is stored at `~/.ai-mesh/config.json` with `0600` permissions.
 
 | Provider | Env Variable | Get a key |
 |----------|-------------|-----------|

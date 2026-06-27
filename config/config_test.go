@@ -7,8 +7,8 @@ import (
 
 func TestSaveLoadRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	userConfigDir = func() (string, error) { return dir, nil }
-	t.Cleanup(func() { userConfigDir = os.UserConfigDir })
+	userHomeDir = func() (string, error) { return dir, nil }
+	t.Cleanup(func() { userHomeDir = os.UserHomeDir })
 
 	// Missing file loads empty.
 	cfg, err := Load()
