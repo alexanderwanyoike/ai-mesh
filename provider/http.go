@@ -15,8 +15,19 @@ import (
 // wait at all.
 var pollInterval = 3 * time.Second
 
-// pollTimeout bounds how long a single job is polled before giving up.
-var pollTimeout = 10 * time.Minute
+// pollTimeout bounds how long a single job is polled before giving up. It is
+// generous by default: heavy models (e.g. Fal pro) can spend many minutes in
+// cold-start/queue before compute even begins, and timing out would discard a
+// job the provider is still running - and that you have already paid for.
+var pollTimeout = 30 * time.Minute
+
+// SetWaitTimeout overrides how long Generate/Fetch will wait for a job. A
+// non-positive duration leaves the default unchanged.
+func SetWaitTimeout(d time.Duration) {
+	if d > 0 {
+		pollTimeout = d
+	}
+}
 
 // postJSON sends a JSON body and decodes the JSON response into out.
 func postJSON(ctx context.Context, client *http.Client, url string, headers map[string]string, body any, out any) error {

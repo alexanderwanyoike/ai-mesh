@@ -104,6 +104,8 @@ is downloaded and written to the `--output` path; the path is echoed to stdout.
 | `--api-key` | `-k` | | API key (overrides env var and config) |
 | `--faces` | | `50000` | Target face/polygon count |
 | `--pbr` | | `false` | Request PBR material maps |
+| `--no-wait` | | `false` | Submit the job, print its ID, and exit (don't block) |
+| `--timeout` | | `30` | Minutes to wait for a job before giving up |
 
 ## Providers
 
@@ -155,6 +157,26 @@ stdout is just the output path, so it chains:
 mesh=$(ai-mesh -i hero.png -o hero.glb)
 blender --background --python import_glb.py -- "$mesh"
 ```
+
+## Long jobs: fire-and-forget
+
+Some models (notably Fal's `pro` tier) can spend many minutes in cold-start and
+queue before compute even begins. Two things help:
+
+- `--timeout <minutes>` (default 30) bounds the wait, generous enough that a slow
+  cold-start won't discard a job the provider is still running (and that you paid
+  for).
+- `--no-wait` submits the job, prints its **ID**, and exits immediately. Retrieve
+  the result whenever it's ready with `fetch` (free - no re-generation):
+
+```bash
+id=$(ai-mesh -p fal -i hero.png --no-wait)
+# ... do other work ...
+ai-mesh fetch fal "$id" -o hero.glb
+```
+
+`--no-wait` works for the single-stage paths (Fal, Meshy image-to-3d). Meshy
+text-to-3d is two-stage and always runs synchronously.
 
 ## Development
 

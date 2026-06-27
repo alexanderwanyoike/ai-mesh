@@ -51,39 +51,20 @@ type meshyTask struct {
 	ConsumedCredits int `json:"consumed_credits"`
 }
 
-func (m *Meshy) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
+// Submit fires a job and returns its task ID. Image-to-3d only: text-to-3d is a
+// two-stage (preview then refine) flow and cannot be detached behind one ID.
+func (m *Meshy) Submit(ctx context.Context, req *GenerateRequest) (string, error) {
 	if req.APIKey == "" {
-		return nil, fmt.Errorf("no API key provided for meshy")
+		return "", fmt.Errorf("no API key provided for meshy")
+	}
+	if req.InputImage == nil {
+		return "", fmt.Errorf("meshy text-to-3d is two-stage and cannot be submitted detached; run without --no-wait")
 	}
 
 	aiModel := req.Model
 	if aiModel == "" {
 		aiModel = m.DefaultModel()
 	}
-
-	var task *meshyTask
-	var err error
-	if req.InputImage != nil {
-		task, err = m.imageTo3D(ctx, req.APIKey, aiModel, req)
-	} else {
-		task, err = m.textTo3D(ctx, req.APIKey, aiModel, req)
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	if task.ModelURLs.GLB == "" {
-		return nil, fmt.Errorf("meshy task had no GLB URL")
-	}
-	data, err := download(ctx, m.httpClient(), task.ModelURLs.GLB)
-	if err != nil {
-		return nil, err
-	}
-	return &GenerateResponse{ModelData: data, Format: "glb", URL: task.ModelURLs.GLB}, nil
-}
-
-func (m *Meshy) imageTo3D(ctx context.Context, apiKey, aiModel string, req *GenerateRequest) (*meshyTask, error) {
-	headers := m.headers(apiKey)
 	payload := map[string]any{
 		"image_url":      dataURI(req.InputImage, req.InputMIME),
 		"ai_model":       aiModel,
@@ -96,13 +77,71 @@ func (m *Meshy) imageTo3D(ctx context.Context, apiKey, aiModel string, req *Gene
 	}
 
 	var created meshyCreateResponse
-	if err := postJSON(ctx, m.httpClient(), m.baseURL()+"/openapi/v1/image-to-3d", headers, payload, &created); err != nil {
-		return nil, fmt.Errorf("creating image-to-3d task: %w", err)
+	if err := postJSON(ctx, m.httpClient(), m.baseURL()+"/openapi/v1/image-to-3d", m.headers(req.APIKey), payload, &created); err != nil {
+		return "", fmt.Errorf("creating image-to-3d task: %w", err)
 	}
 	if created.Result == "" {
-		return nil, fmt.Errorf("meshy create returned no task id")
+		return "", fmt.Errorf("meshy create returned no task id")
 	}
-	return m.waitForTask(ctx, headers, m.baseURL()+"/openapi/v1/image-to-3d/"+created.Result)
+	return created.Result, nil
+}
+
+// Generate submits and waits for the result.
+func (m *Meshy) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
+	if req.APIKey == "" {
+		return nil, fmt.Errorf("no API key provided for meshy")
+	}
+
+	var task *meshyTask
+	var err error
+	if req.InputImage != nil {
+		id, serr := m.Submit(ctx, req)
+		if serr != nil {
+			return nil, serr
+		}
+		task, err = m.waitForTask(ctx, m.headers(req.APIKey), m.baseURL()+"/openapi/v1/image-to-3d/"+id)
+	} else {
+		aiModel := req.Model
+		if aiModel == "" {
+			aiModel = m.DefaultModel()
+		}
+		task, err = m.textTo3D(ctx, req.APIKey, aiModel, req)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return m.resultFromTask(ctx, task)
+}
+
+// Fetch waits for an already-submitted Meshy task (by ID) and returns the
+// result. It auto-detects image-to-3d (v1) vs text-to-3d (v2) tasks.
+func (m *Meshy) Fetch(ctx context.Context, apiKey, taskID string) (*GenerateResponse, error) {
+	if apiKey == "" {
+		return nil, fmt.Errorf("no API key provided for meshy")
+	}
+	headers := m.headers(apiKey)
+	taskURL := m.baseURL() + "/openapi/v1/image-to-3d/" + taskID
+	var probe meshyTask
+	if err := getJSON(ctx, m.httpClient(), taskURL, headers, &probe); err != nil {
+		// Not an image task; try the text-to-3d endpoint.
+		taskURL = m.baseURL() + "/openapi/v2/text-to-3d/" + taskID
+	}
+	task, err := m.waitForTask(ctx, headers, taskURL)
+	if err != nil {
+		return nil, err
+	}
+	return m.resultFromTask(ctx, task)
+}
+
+func (m *Meshy) resultFromTask(ctx context.Context, task *meshyTask) (*GenerateResponse, error) {
+	if task.ModelURLs.GLB == "" {
+		return nil, fmt.Errorf("meshy task had no GLB URL")
+	}
+	data, err := download(ctx, m.httpClient(), task.ModelURLs.GLB)
+	if err != nil {
+		return nil, err
+	}
+	return &GenerateResponse{ModelData: data, Format: "glb", URL: task.ModelURLs.GLB}, nil
 }
 
 func (m *Meshy) textTo3D(ctx context.Context, apiKey, aiModel string, req *GenerateRequest) (*meshyTask, error) {
