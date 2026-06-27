@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/alexanderwanyoike/ai-mesh/config"
 	"github.com/alexanderwanyoike/ai-mesh/provider"
@@ -23,6 +24,8 @@ var (
 	faces        int
 	pbr          bool
 	apiKey       string
+	noWait       bool
+	timeoutMin   int
 )
 
 var rootCmd = &cobra.Command{
@@ -58,6 +61,8 @@ func init() {
 	rootCmd.Flags().IntVar(&faces, "faces", 50000, "target face/polygon count")
 	rootCmd.Flags().BoolVar(&pbr, "pbr", false, "request PBR material maps")
 	rootCmd.Flags().StringVarP(&apiKey, "api-key", "k", "", "API key (overrides env var and config)")
+	rootCmd.Flags().BoolVar(&noWait, "no-wait", false, "submit the job, print its ID, and exit (fetch later with 'ai-mesh fetch')")
+	rootCmd.Flags().IntVar(&timeoutMin, "timeout", 30, "minutes to wait for a job before giving up")
 }
 
 // Execute runs the root command.
@@ -77,19 +82,11 @@ func run(prompt string) error {
 		return fmt.Errorf("provide a text prompt or an --input image")
 	}
 
-	cfg, err := config.Load()
+	key, err := resolveKey(p)
 	if err != nil {
 		return err
 	}
-	key := config.ResolveKey(apiKey, os.Getenv(p.APIKeyEnv()), cfg.Keys[p.Name()])
-	if key == "" {
-		return fmt.Errorf("no API key for provider %q. Set one with any of:\n"+
-			"  ai-mesh config set %s <key>\n"+
-			"  export %s=<key>\n"+
-			"  --api-key <key>\n"+
-			"Get a key: %s",
-			p.Name(), p.Name(), p.APIKeyEnv(), p.APIKeyURL())
-	}
+	provider.SetWaitTimeout(time.Duration(timeoutMin) * time.Minute)
 
 	req := &provider.GenerateRequest{
 		APIKey:    key,
@@ -113,6 +110,20 @@ func run(prompt string) error {
 		modelName = p.DefaultModel()
 	}
 
+	ctx := context.Background()
+
+	// Fire-and-forget: submit, print the job ID, and exit without waiting.
+	if noWait {
+		id, err := p.Submit(ctx, req)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "Submitted %s job %s. Fetch it when ready:\n  ai-mesh fetch %s %s -o %s\n",
+			p.Name(), id, p.Name(), id, output)
+		fmt.Println(id)
+		return nil
+	}
+
 	// Progress goes to stderr so stdout stays clean for scripting/agents.
 	if input != "" {
 		fmt.Fprintf(os.Stderr, "Generating mesh from image: %s (%s)\n", input, req.InputMIME)
@@ -121,7 +132,6 @@ func run(prompt string) error {
 	}
 	fmt.Fprintf(os.Stderr, "Provider: %s | Model: %s\n", p.Name(), modelName)
 
-	ctx := context.Background()
 	resp, err := p.Generate(ctx, req)
 	if err != nil {
 		return err
@@ -129,25 +139,42 @@ func run(prompt string) error {
 	if resp.Message != "" {
 		fmt.Fprintf(os.Stderr, "Note: %s\n", resp.Message)
 	}
+	return writeOutput(resp.ModelData, output)
+}
 
-	outputFile := output
-	if !strings.HasSuffix(strings.ToLower(outputFile), ".glb") {
-		outputFile += ".glb"
+// resolveKey returns the API key for a provider using precedence flag > env > config.
+func resolveKey(p provider.Provider) (string, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return "", err
 	}
+	key := config.ResolveKey(apiKey, os.Getenv(p.APIKeyEnv()), cfg.Keys[p.Name()])
+	if key == "" {
+		return "", fmt.Errorf("no API key for provider %q. Set one with any of:\n"+
+			"  ai-mesh config set %s <key>\n"+
+			"  export %s=<key>\n"+
+			"  --api-key <key>\n"+
+			"Get a key: %s",
+			p.Name(), p.Name(), p.APIKeyEnv(), p.APIKeyURL())
+	}
+	return key, nil
+}
 
-	dir := filepath.Dir(outputFile)
-	if dir != "." && dir != "" {
+// writeOutput writes the model bytes to path (ensuring a .glb suffix) and prints
+// the final path to stdout for scripting.
+func writeOutput(data []byte, path string) error {
+	if !strings.HasSuffix(strings.ToLower(path), ".glb") {
+		path += ".glb"
+	}
+	if dir := filepath.Dir(path); dir != "." && dir != "" {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return fmt.Errorf("creating directory: %w", err)
 		}
 	}
-
-	if err := os.WriteFile(outputFile, resp.ModelData, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0644); err != nil {
 		return fmt.Errorf("writing file: %w", err)
 	}
-
-	fmt.Fprintf(os.Stderr, "Saved: %s (%d bytes)\n", outputFile, len(resp.ModelData))
-	// The final path on stdout, so `ai-mesh ... | xargs blender ...` works.
-	fmt.Println(outputFile)
+	fmt.Fprintf(os.Stderr, "Saved: %s (%d bytes)\n", path, len(data))
+	fmt.Println(path)
 	return nil
 }

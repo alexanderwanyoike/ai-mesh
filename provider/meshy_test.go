@@ -146,3 +146,56 @@ func TestMeshyRequiresKey(t *testing.T) {
 		t.Errorf("expected missing-key error, got %v", err)
 	}
 }
+
+func TestMeshySubmitImageReturnsID(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/openapi/v1/image-to-3d", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"result": "task-xyz"})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	m := &Meshy{HTTPClient: srv.Client(), BaseURL: srv.URL}
+	id, err := m.Submit(context.Background(), &GenerateRequest{APIKey: "k", InputImage: []byte("x"), InputMIME: "image/png"})
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	if id != "task-xyz" {
+		t.Errorf("id = %q, want task-xyz", id)
+	}
+}
+
+func TestMeshySubmitTextRejected(t *testing.T) {
+	m := &Meshy{}
+	_, err := m.Submit(context.Background(), &GenerateRequest{APIKey: "k", Prompt: "a chest"})
+	if err == nil || !strings.Contains(err.Error(), "two-stage") {
+		t.Errorf("expected two-stage rejection, got %v", err)
+	}
+}
+
+func TestMeshyFetchImageByID(t *testing.T) {
+	pollInterval = time.Millisecond
+
+	var srvURL string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/openapi/v1/image-to-3d/task-7", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{
+			"status":     "SUCCEEDED",
+			"model_urls": map[string]any{"glb": srvURL + "/m.glb"},
+		})
+	})
+	mux.HandleFunc("/m.glb", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("MFETCH")) })
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	srvURL = srv.URL
+
+	m := &Meshy{HTTPClient: srv.Client(), BaseURL: srv.URL}
+	resp, err := m.Fetch(context.Background(), "k", "task-7")
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if string(resp.ModelData) != "MFETCH" {
+		t.Errorf("ModelData = %q, want MFETCH", resp.ModelData)
+	}
+}

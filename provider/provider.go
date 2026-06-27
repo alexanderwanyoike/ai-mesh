@@ -34,7 +34,13 @@ type Provider interface {
 	APIKeyEnv() string
 	// APIKeyURL is where a user can obtain an API key.
 	APIKeyURL() string
+	// Generate submits a job and waits for the finished model.
 	Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error)
+	// Submit fires a job and returns a provider job ID without waiting, for
+	// fire-and-forget use. Some inputs may not support it (returns an error).
+	Submit(ctx context.Context, req *GenerateRequest) (jobID string, err error)
+	// Fetch waits for an already-submitted job (by ID) and returns the model.
+	Fetch(ctx context.Context, apiKey, jobID string) (*GenerateResponse, error)
 }
 
 var registry = map[string]Provider{}
