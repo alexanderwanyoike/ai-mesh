@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
-	"os"
 )
 
 func init() { Register(&Fal{}) }
@@ -21,6 +20,8 @@ type Fal struct {
 
 func (f *Fal) Name() string         { return "fal" }
 func (f *Fal) DefaultModel() string { return falDefaultModel }
+func (f *Fal) APIKeyEnv() string    { return "FAL_API_KEY" }
+func (f *Fal) APIKeyURL() string    { return "https://fal.ai/dashboard/keys" }
 
 func (f *Fal) httpClient() *http.Client {
 	if f.HTTPClient != nil {
@@ -58,9 +59,8 @@ type falResult struct {
 }
 
 func (f *Fal) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
-	apiKey := os.Getenv("FAL_API_KEY")
-	if apiKey == "" {
-		return nil, fmt.Errorf("FAL_API_KEY environment variable not set\nGet your API key from https://fal.ai/dashboard/keys")
+	if req.APIKey == "" {
+		return nil, fmt.Errorf("no API key provided for fal")
 	}
 	if req.InputImage == nil {
 		return nil, fmt.Errorf("fal is image-to-3d only: pass an image with -i, pipe one from ai-img, or use -p meshy for text-to-3d")
@@ -70,7 +70,7 @@ func (f *Fal) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResp
 	if model == "" {
 		model = f.DefaultModel()
 	}
-	headers := map[string]string{"Authorization": "Key " + apiKey}
+	headers := map[string]string{"Authorization": "Key " + req.APIKey}
 
 	payload := map[string]any{
 		"input_image_url": dataURI(req.InputImage, req.InputMIME),

@@ -12,7 +12,6 @@ import (
 
 func TestMeshyImageToMesh(t *testing.T) {
 	pollInterval = time.Millisecond
-	t.Setenv("MESHY_API_KEY", "test-key")
 
 	var srvURL string
 	var gotPayload map[string]any
@@ -40,6 +39,7 @@ func TestMeshyImageToMesh(t *testing.T) {
 
 	m := &Meshy{HTTPClient: srv.Client(), BaseURL: srv.URL}
 	resp, err := m.Generate(context.Background(), &GenerateRequest{
+		APIKey:     "test-key",
 		InputImage: []byte("imagebytes"),
 		InputMIME:  "image/png",
 		FaceCount:  30000,
@@ -66,7 +66,6 @@ func TestMeshyImageToMesh(t *testing.T) {
 
 func TestMeshyTextToMeshTwoStage(t *testing.T) {
 	pollInterval = time.Millisecond
-	t.Setenv("MESHY_API_KEY", "test-key")
 
 	var srvURL string
 	var modes []string
@@ -105,7 +104,7 @@ func TestMeshyTextToMeshTwoStage(t *testing.T) {
 	srvURL = srv.URL
 
 	m := &Meshy{HTTPClient: srv.Client(), BaseURL: srv.URL}
-	resp, err := m.Generate(context.Background(), &GenerateRequest{Prompt: "a low-poly chest"})
+	resp, err := m.Generate(context.Background(), &GenerateRequest{APIKey: "test-key", Prompt: "a low-poly chest"})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
@@ -119,7 +118,6 @@ func TestMeshyTextToMeshTwoStage(t *testing.T) {
 
 func TestMeshyTaskFailed(t *testing.T) {
 	pollInterval = time.Millisecond
-	t.Setenv("MESHY_API_KEY", "test-key")
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/openapi/v1/image-to-3d", func(w http.ResponseWriter, r *http.Request) {
@@ -135,17 +133,16 @@ func TestMeshyTaskFailed(t *testing.T) {
 	defer srv.Close()
 
 	m := &Meshy{HTTPClient: srv.Client(), BaseURL: srv.URL}
-	_, err := m.Generate(context.Background(), &GenerateRequest{InputImage: []byte("x"), InputMIME: "image/png"})
+	_, err := m.Generate(context.Background(), &GenerateRequest{APIKey: "test-key", InputImage: []byte("x"), InputMIME: "image/png"})
 	if err == nil || !strings.Contains(err.Error(), "bad image") {
 		t.Errorf("expected failed-task error, got %v", err)
 	}
 }
 
 func TestMeshyRequiresKey(t *testing.T) {
-	t.Setenv("MESHY_API_KEY", "")
 	m := &Meshy{}
 	_, err := m.Generate(context.Background(), &GenerateRequest{Prompt: "x"})
-	if err == nil || !strings.Contains(err.Error(), "MESHY_API_KEY") {
-		t.Errorf("expected MESHY_API_KEY error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "no API key") {
+		t.Errorf("expected missing-key error, got %v", err)
 	}
 }

@@ -9,6 +9,7 @@ import (
 
 // GenerateRequest holds the parameters for a mesh generation request.
 type GenerateRequest struct {
+	APIKey     string // resolved by the caller (flag > env > config)
 	Prompt     string // text prompt (text-to-3d); ignored when InputImage is set
 	Model      string // provider-specific model/endpoint; empty uses the default
 	InputImage []byte // reference image for image-to-3d; nil for text-to-3d
@@ -29,6 +30,10 @@ type GenerateResponse struct {
 type Provider interface {
 	Name() string
 	DefaultModel() string
+	// APIKeyEnv is the environment variable this provider's key is read from.
+	APIKeyEnv() string
+	// APIKeyURL is where a user can obtain an API key.
+	APIKeyURL() string
 	Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error)
 }
 

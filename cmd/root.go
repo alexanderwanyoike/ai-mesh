@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/alexanderwanyoike/ai-mesh/config"
 	"github.com/alexanderwanyoike/ai-mesh/provider"
 	"github.com/spf13/cobra"
 
@@ -21,6 +22,7 @@ var (
 	input        string
 	faces        int
 	pbr          bool
+	apiKey       string
 )
 
 var rootCmd = &cobra.Command{
@@ -55,6 +57,7 @@ func init() {
 	rootCmd.Flags().StringVarP(&input, "input", "i", "", "input image for image-to-3d")
 	rootCmd.Flags().IntVar(&faces, "faces", 50000, "target face/polygon count")
 	rootCmd.Flags().BoolVar(&pbr, "pbr", false, "request PBR material maps")
+	rootCmd.Flags().StringVarP(&apiKey, "api-key", "k", "", "API key (overrides env var and config)")
 }
 
 // Execute runs the root command.
@@ -74,7 +77,22 @@ func run(prompt string) error {
 		return fmt.Errorf("provide a text prompt or an --input image")
 	}
 
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	key := config.ResolveKey(apiKey, os.Getenv(p.APIKeyEnv()), cfg.Keys[p.Name()])
+	if key == "" {
+		return fmt.Errorf("no API key for provider %q. Set one with any of:\n"+
+			"  ai-mesh config set %s <key>\n"+
+			"  export %s=<key>\n"+
+			"  --api-key <key>\n"+
+			"Get a key: %s",
+			p.Name(), p.Name(), p.APIKeyEnv(), p.APIKeyURL())
+	}
+
 	req := &provider.GenerateRequest{
+		APIKey:    key,
 		Prompt:    prompt,
 		Model:     model,
 		FaceCount: faces,
