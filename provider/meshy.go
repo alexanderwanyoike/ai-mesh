@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 )
 
 func init() { Register(&Meshy{}) }
@@ -20,6 +19,8 @@ type Meshy struct {
 
 func (m *Meshy) Name() string         { return "meshy" }
 func (m *Meshy) DefaultModel() string { return meshyDefaultModel }
+func (m *Meshy) APIKeyEnv() string    { return "MESHY_API_KEY" }
+func (m *Meshy) APIKeyURL() string    { return "https://www.meshy.ai/api" }
 
 func (m *Meshy) httpClient() *http.Client {
 	if m.HTTPClient != nil {
@@ -51,9 +52,8 @@ type meshyTask struct {
 }
 
 func (m *Meshy) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
-	apiKey := os.Getenv("MESHY_API_KEY")
-	if apiKey == "" {
-		return nil, fmt.Errorf("MESHY_API_KEY environment variable not set\nGet your API key from https://www.meshy.ai/api")
+	if req.APIKey == "" {
+		return nil, fmt.Errorf("no API key provided for meshy")
 	}
 
 	aiModel := req.Model
@@ -64,9 +64,9 @@ func (m *Meshy) Generate(ctx context.Context, req *GenerateRequest) (*GenerateRe
 	var task *meshyTask
 	var err error
 	if req.InputImage != nil {
-		task, err = m.imageTo3D(ctx, apiKey, aiModel, req)
+		task, err = m.imageTo3D(ctx, req.APIKey, aiModel, req)
 	} else {
-		task, err = m.textTo3D(ctx, apiKey, aiModel, req)
+		task, err = m.textTo3D(ctx, req.APIKey, aiModel, req)
 	}
 	if err != nil {
 		return nil, err

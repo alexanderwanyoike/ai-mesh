@@ -49,10 +49,40 @@ ai-mesh -p meshy "a low-poly treasure chest" -o chest.glb
 
 ## Configuration
 
-| Provider | Environment Variable | Get a key |
-|----------|---------------------|-----------|
-| Fal      | `FAL_API_KEY`       | [Fal dashboard](https://fal.ai/dashboard/keys) |
-| Meshy    | `MESHY_API_KEY`     | [Meshy API](https://www.meshy.ai/api) |
+ai-mesh needs an API key for the provider you use. There are three ways to set
+one, resolved in this order of precedence:
+
+1. **`--api-key` flag** (per call, handy for agents):
+   ```bash
+   ai-mesh -p meshy -k "$MY_KEY" "a chest" -o chest.glb
+   ```
+2. **Environment variable**:
+   ```bash
+   export FAL_API_KEY="..."      # for -p fal
+   export MESHY_API_KEY="..."    # for -p meshy
+   ```
+3. **Config file** (persistent, no shell env needed):
+   ```bash
+   ai-mesh config set fal "your-fal-key"
+   ai-mesh config set meshy "your-meshy-key"
+   ```
+
+The config file is stored at `~/.ai-mesh/config.json` with `0600` permissions.
+
+| Provider | Env Variable | Get a key |
+|----------|-------------|-----------|
+| Fal      | `FAL_API_KEY`   | [Fal dashboard](https://fal.ai/dashboard/keys) |
+| Meshy    | `MESHY_API_KEY` | [Meshy API](https://www.meshy.ai/api) |
+
+### Managing stored keys
+
+```bash
+ai-mesh config set <provider> <key>   # store a key
+ai-mesh config get <provider>         # show it (masked)
+ai-mesh config list                   # status for every provider
+ai-mesh config unset <provider>       # remove a stored key
+ai-mesh config path                   # print the config file path
+```
 
 ## Usage
 
@@ -71,6 +101,7 @@ is downloaded and written to the `--output` path; the path is echoed to stdout.
 | `--model` | `-m` | per-provider | Model name/ID or endpoint |
 | `--output` | `-o` | `output.glb` | Output file path |
 | `--input` | `-i` | | Input image for image-to-3d |
+| `--api-key` | `-k` | | API key (overrides env var and config) |
 | `--faces` | | `50000` | Target face/polygon count |
 | `--pbr` | | `false` | Request PBR material maps |
 

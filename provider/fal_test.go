@@ -12,7 +12,6 @@ import (
 
 func TestFalGenerateImageToMesh(t *testing.T) {
 	pollInterval = time.Millisecond
-	t.Setenv("FAL_API_KEY", "test-key")
 
 	var srvURL string
 	var gotPayload map[string]any
@@ -46,6 +45,7 @@ func TestFalGenerateImageToMesh(t *testing.T) {
 
 	f := &Fal{HTTPClient: srv.Client(), BaseURL: srv.URL}
 	resp, err := f.Generate(context.Background(), &GenerateRequest{
+		APIKey:     "test-key",
 		InputImage: []byte("imagebytes"),
 		InputMIME:  "image/png",
 		FaceCount:  100000,
@@ -77,20 +77,18 @@ func TestFalGenerateImageToMesh(t *testing.T) {
 }
 
 func TestFalRejectsTextOnly(t *testing.T) {
-	t.Setenv("FAL_API_KEY", "test-key")
 	f := &Fal{}
-	_, err := f.Generate(context.Background(), &GenerateRequest{Prompt: "a dragon"})
+	_, err := f.Generate(context.Background(), &GenerateRequest{APIKey: "test-key", Prompt: "a dragon"})
 	if err == nil || !strings.Contains(err.Error(), "image-to-3d only") {
 		t.Errorf("expected image-to-3d-only error, got %v", err)
 	}
 }
 
 func TestFalRequiresKey(t *testing.T) {
-	t.Setenv("FAL_API_KEY", "")
 	f := &Fal{}
 	_, err := f.Generate(context.Background(), &GenerateRequest{InputImage: []byte("x")})
-	if err == nil || !strings.Contains(err.Error(), "FAL_API_KEY") {
-		t.Errorf("expected FAL_API_KEY error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "no API key") {
+		t.Errorf("expected missing-key error, got %v", err)
 	}
 }
 
