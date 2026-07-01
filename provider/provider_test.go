@@ -6,14 +6,14 @@ import (
 )
 
 func TestRegistry(t *testing.T) {
-	if got := List(); !reflect.DeepEqual(got, []string{"fal", "meshy"}) {
-		t.Errorf("List() = %v, want [fal meshy]", got)
+	want := []string{"fal", "meshy", "pixal3d", "rodin", "tripo"}
+	if got := List(); !reflect.DeepEqual(got, want) {
+		t.Errorf("List() = %v, want %v", got, want)
 	}
-	if Get("fal") == nil {
-		t.Error("Get(fal) = nil")
-	}
-	if Get("meshy") == nil {
-		t.Error("Get(meshy) = nil")
+	for _, name := range want {
+		if Get(name) == nil {
+			t.Errorf("Get(%q) = nil", name)
+		}
 	}
 	if Get("nope") != nil {
 		t.Error("Get(nope) should be nil")

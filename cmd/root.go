@@ -35,8 +35,14 @@ var rootCmd = &cobra.Command{
 It downloads the result from the provider and writes it to a file.
 
 Providers:
-  fal     - Tencent Hunyuan3D 3.1 on Fal, image-to-3d only (requires FAL_API_KEY)
-  meshy   - Meshy, text-to-3d and image-to-3d (requires MESHY_API_KEY)
+  fal      - Tencent Hunyuan3D 3.1 on Fal, image-to-3d only (requires FAL_API_KEY)
+  pixal3d  - TencentARC Pixal3D on Fal, image-to-3d only (requires FAL_API_KEY)
+  tripo    - Tripo v2.5 on Fal, image-to-3d only (requires FAL_API_KEY)
+  rodin    - Hyper3D Rodin on Fal, image-to-3d only (requires FAL_API_KEY)
+  meshy    - Meshy, text-to-3d and image-to-3d (requires MESHY_API_KEY)
+
+The fal, pixal3d, tripo, and rodin providers are all hosted on Fal and share
+one FAL_API_KEY.
 
 Compose it with ai-img for text -> image -> mesh:
   ai-img "a stone golem" -o golem.png && ai-mesh -i golem.png -o golem.glb`,
@@ -54,7 +60,7 @@ Compose it with ai-img for text -> image -> mesh:
 }
 
 func init() {
-	rootCmd.Flags().StringVarP(&providerName, "provider", "p", "fal", "provider to use: fal, meshy")
+	rootCmd.Flags().StringVarP(&providerName, "provider", "p", "fal", "provider to use: fal, pixal3d, tripo, rodin, meshy")
 	rootCmd.Flags().StringVarP(&model, "model", "m", "", "model name/ID (defaults per provider)")
 	rootCmd.Flags().StringVarP(&output, "output", "o", "output.glb", "output file path")
 	rootCmd.Flags().StringVarP(&input, "input", "i", "", "input image for image-to-3d")

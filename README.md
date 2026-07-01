@@ -2,7 +2,7 @@
 
 A multi-provider CLI for generating 3D meshes (GLB) from text or images with AI.
 
-Supports [Fal](https://fal.ai/) (Tencent Hunyuan3D 3.1) and [Meshy](https://www.meshy.ai/) out of the box, with a clean provider interface for adding more. Built to be scripted, batched, and called by agents - one mesh per invocation, the output path on stdout, progress on stderr.
+Supports [Fal](https://fal.ai/) (Hunyuan3D 3.1, Pixal3D, Tripo, Rodin) and [Meshy](https://www.meshy.ai/) out of the box, with a clean provider interface for adding more. Built to be scripted, batched, and called by agents - one mesh per invocation, the output path on stdout, progress on stderr.
 
 It is the mesh half of a composable pair with [ai-img](https://github.com/alexanderwanyoike/ai-img): `ai-img` turns a prompt into an image, `ai-mesh` turns an image into a mesh.
 
@@ -71,8 +71,12 @@ The config file is stored at `~/.ai-mesh/config.json` with `0600` permissions.
 
 | Provider | Env Variable | Get a key |
 |----------|-------------|-----------|
-| Fal      | `FAL_API_KEY`   | [Fal dashboard](https://fal.ai/dashboard/keys) |
+| Fal / Pixal3D / Tripo / Rodin | `FAL_API_KEY` | [Fal dashboard](https://fal.ai/dashboard/keys) |
 | Meshy    | `MESHY_API_KEY` | [Meshy API](https://www.meshy.ai/api) |
+
+The four Fal-hosted providers (`fal`, `pixal3d`, `tripo`, `rodin`) all read the
+same `FAL_API_KEY`, so one env var covers them all. To store keys in the config
+file instead, set each provider name separately (`ai-mesh config set tripo <key>`).
 
 ### Managing stored keys
 
@@ -97,7 +101,7 @@ is downloaded and written to the `--output` path; the path is echoed to stdout.
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--provider` | `-p` | `fal` | Provider: `fal`, `meshy` |
+| `--provider` | `-p` | `fal` | Provider: `fal`, `pixal3d`, `tripo`, `rodin`, `meshy` |
 | `--model` | `-m` | per-provider | Model name/ID or endpoint |
 | `--output` | `-o` | `output.glb` | Output file path |
 | `--input` | `-i` | | Input image for image-to-3d |
@@ -118,6 +122,35 @@ a hint to pass an image or use Meshy.
 |--------------|-------------|
 | `fal-ai/hunyuan-3d/v3.1/pro/image-to-3d` (default) | High quality, up to 1.5M faces |
 | `fal-ai/hunyuan-3d/v3.1/rapid/image-to-3d` | Faster / cheaper |
+
+### Pixal3D - image-to-3d
+
+TencentARC Pixal3D on Fal: pixel-aligned, high-fidelity geometry and texture.
+`--faces` maps to its decimation target (remesh on); `--pbr` has no effect
+(Pixal3D always textures).
+
+| Model (`-m`) | Description |
+|--------------|-------------|
+| `fal-ai/pixal3d` (default) | Pixel-aligned image-to-3d |
+
+### Tripo - image-to-3d
+
+Tripo v2.5 on Fal: fast, strong geometry. `--faces` maps to `face_limit`;
+`--pbr` requests PBR maps.
+
+| Model (`-m`) | Description |
+|--------------|-------------|
+| `tripo3d/tripo/v2.5/image-to-3d` (default) | Tripo v2.5 image-to-3d |
+
+### Rodin - image-to-3d
+
+Hyper3D Rodin on Fal: premium quality. `--pbr` selects the `PBR` material
+(default `Shaded`); Rodin controls density with its own quality tier, so
+`--faces` has no effect.
+
+| Model (`-m`) | Description |
+|--------------|-------------|
+| `fal-ai/hyper3d/rodin` (default) | Hyper3D Rodin image-to-3d |
 
 ### Meshy - text-to-3d and image-to-3d
 

@@ -58,10 +58,26 @@ type falFile struct {
 
 type falResult struct {
 	ModelGLB  falFile `json:"model_glb"`
+	ModelMesh falFile `json:"model_mesh"`
 	ModelURLs struct {
 		GLB falFile `json:"glb"`
 	} `json:"model_urls"`
 	Seed int `json:"seed"`
+}
+
+// falGLBURL resolves the GLB download url across the output shapes Fal's 3D
+// models use: model_urls.glb (Hunyuan3D), model_glb (Hunyuan3D, Pixal3D), or
+// model_mesh (Tripo, Rodin). model_urls.glb wins because model_glb is
+// polymorphic - on some Hunyuan tiers (e.g. rapid) it points at an OBJ, whereas
+// model_urls.glb is always GLB.
+func falGLBURL(r falResult) string {
+	if r.ModelURLs.GLB.URL != "" {
+		return r.ModelURLs.GLB.URL
+	}
+	if r.ModelGLB.URL != "" {
+		return r.ModelGLB.URL
+	}
+	return r.ModelMesh.URL
 }
 
 // submit posts the job and returns Fal's queue handles.
@@ -151,12 +167,7 @@ func (f *Fal) await(ctx context.Context, apiKey, statusURL, responseURL string) 
 		return nil, fmt.Errorf("fetching result: %w", err)
 	}
 
-	// Prefer the dedicated GLB url. model_glb is polymorphic - on some tiers
-	// (e.g. rapid) it can point at an OBJ - whereas model_urls.glb is always GLB.
-	url := result.ModelURLs.GLB.URL
-	if url == "" {
-		url = result.ModelGLB.URL
-	}
+	url := falGLBURL(result)
 	if url == "" {
 		return nil, fmt.Errorf("fal response had no GLB URL")
 	}
