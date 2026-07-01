@@ -44,7 +44,7 @@ func TestFalGenerateImageToMesh(t *testing.T) {
 	defer srv.Close()
 	srvURL = srv.URL
 
-	f := &Fal{HTTPClient: srv.Client(), BaseURL: srv.URL}
+	f := &Fal{falQueue{HTTPClient: srv.Client(), BaseURL: srv.URL}}
 	resp, err := f.Generate(context.Background(), &GenerateRequest{
 		APIKey:     "test-key",
 		InputImage: []byte("imagebytes"),
@@ -119,7 +119,7 @@ func TestFalPrefersDedicatedGLBURL(t *testing.T) {
 	defer srv.Close()
 	srvURL = srv.URL
 
-	f := &Fal{HTTPClient: srv.Client(), BaseURL: srv.URL}
+	f := &Fal{falQueue{HTTPClient: srv.Client(), BaseURL: srv.URL}}
 	resp, err := f.Generate(context.Background(), &GenerateRequest{
 		APIKey:     "k",
 		Model:      "fal-ai/hunyuan-3d/v3.1/rapid/image-to-3d",
@@ -144,7 +144,7 @@ func TestFalSubmitReturnsID(t *testing.T) {
 	defer srv.Close()
 	srvURL = srv.URL
 
-	f := &Fal{HTTPClient: srv.Client(), BaseURL: srv.URL}
+	f := &Fal{falQueue{HTTPClient: srv.Client(), BaseURL: srv.URL}}
 	id, err := f.Submit(context.Background(), &GenerateRequest{APIKey: "k", InputImage: []byte("x"), InputMIME: "image/png"})
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
@@ -173,7 +173,7 @@ func TestFalFetchByID(t *testing.T) {
 	defer srv.Close()
 	srvURL = srv.URL
 
-	f := &Fal{HTTPClient: srv.Client(), BaseURL: srv.URL}
+	f := &Fal{falQueue{HTTPClient: srv.Client(), BaseURL: srv.URL}}
 	resp, err := f.Fetch(context.Background(), "k", "job-9")
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
@@ -181,9 +181,4 @@ func TestFalFetchByID(t *testing.T) {
 	if string(resp.ModelData) != "FETCHED" {
 		t.Errorf("ModelData = %q, want FETCHED", resp.ModelData)
 	}
-}
-
-func writeJSON(w http.ResponseWriter, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(v)
 }

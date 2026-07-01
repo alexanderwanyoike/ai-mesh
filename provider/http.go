@@ -3,12 +3,21 @@ package provider
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
 )
+
+// dataURI encodes image bytes as a base64 data URI accepted by Fal and Meshy.
+func dataURI(image []byte, mime string) string {
+	if mime == "" {
+		mime = "image/png"
+	}
+	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(image)
+}
 
 // pollInterval is how long to wait between job-status polls. It is a package
 // variable so tests can shrink it; jobs that complete on the first poll never
