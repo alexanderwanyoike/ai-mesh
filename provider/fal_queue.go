@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 // falQueue is the shared Fal queue-API transport used by every Fal-hosted
@@ -145,10 +146,15 @@ func falKeyHeader(apiKey string) map[string]string {
 	return map[string]string{"Authorization": "Key " + apiKey}
 }
 
-// modelOr returns the request's model override, or the provider default.
-func modelOr(model, def string) string {
-	if model != "" {
-		return model
+// falAppBase derives the Fal queue "app" from a model endpoint - the first two
+// path segments (owner/app). Fal's per-request URLs live under this base, not the
+// full versioned model path, so fetch-by-id reconstructs from it. Examples:
+// fal-ai/hunyuan-3d/v3.1/pro/image-to-3d -> fal-ai/hunyuan-3d; fal-ai/pixal3d ->
+// fal-ai/pixal3d; tripo3d/tripo/v2.5/image-to-3d -> tripo3d/tripo.
+func falAppBase(endpoint string) string {
+	parts := strings.SplitN(endpoint, "/", 3)
+	if len(parts) < 2 {
+		return endpoint
 	}
-	return def
+	return parts[0] + "/" + parts[1]
 }

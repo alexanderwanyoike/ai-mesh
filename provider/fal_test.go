@@ -122,7 +122,7 @@ func TestFalPrefersDedicatedGLBURL(t *testing.T) {
 	f := &Fal{falQueue{HTTPClient: srv.Client(), BaseURL: srv.URL}}
 	resp, err := f.Generate(context.Background(), &GenerateRequest{
 		APIKey:     "k",
-		Model:      "fal-ai/hunyuan-3d/v3.1/rapid/image-to-3d",
+		Model:      "hunyuan3d-rapid",
 		InputImage: []byte("img"),
 		InputMIME:  "image/png",
 	})
@@ -174,11 +174,45 @@ func TestFalFetchByID(t *testing.T) {
 	srvURL = srv.URL
 
 	f := &Fal{falQueue{HTTPClient: srv.Client(), BaseURL: srv.URL}}
-	resp, err := f.Fetch(context.Background(), "k", "job-9")
+	resp, err := f.Fetch(context.Background(), "k", "hunyuan3d", "job-9")
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
 	if string(resp.ModelData) != "FETCHED" {
 		t.Errorf("ModelData = %q, want FETCHED", resp.ModelData)
+	}
+}
+
+func TestFalUnknownModel(t *testing.T) {
+	f := &Fal{}
+	_, err := f.Generate(context.Background(), &GenerateRequest{
+		APIKey: "k", Model: "bogus", InputImage: []byte("x"), InputMIME: "image/png",
+	})
+	if err == nil || !strings.Contains(err.Error(), "unknown fal model") {
+		t.Errorf("expected unknown-model error, got %v", err)
+	}
+}
+
+// A -m value containing a slash is treated as a raw Fal endpoint (advanced
+// passthrough), using the Hunyuan-style payload.
+func TestFalRawEndpointPassthrough(t *testing.T) {
+	srv, _, payload := falMoreServer(t, "/fal-ai/some-new-model/image-to-3d", "model_glb")
+	defer srv.Close()
+
+	f := &Fal{falQueue{HTTPClient: srv.Client(), BaseURL: srv.URL}}
+	resp, err := f.Generate(context.Background(), &GenerateRequest{
+		APIKey:     "k",
+		Model:      "fal-ai/some-new-model/image-to-3d",
+		InputImage: []byte("x"),
+		InputMIME:  "image/png",
+	})
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if string(resp.ModelData) != "GLB_BYTES" {
+		t.Errorf("ModelData = %q, want GLB_BYTES", resp.ModelData)
+	}
+	if _, ok := (*payload)["input_image_url"]; !ok {
+		t.Errorf("raw passthrough should use input_image_url payload, got %v", *payload)
 	}
 }

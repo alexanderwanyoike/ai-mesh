@@ -191,7 +191,7 @@ func TestMeshyFetchImageByID(t *testing.T) {
 	srvURL = srv.URL
 
 	m := &Meshy{HTTPClient: srv.Client(), BaseURL: srv.URL}
-	resp, err := m.Fetch(context.Background(), "k", "task-7")
+	resp, err := m.Fetch(context.Background(), "k", "", "task-7")
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}

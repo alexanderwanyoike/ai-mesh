@@ -26,10 +26,16 @@ type GenerateResponse struct {
 	Message   string // optional human-readable note from the provider
 }
 
-// Provider defines the interface that mesh generation backends must implement.
+// Provider defines the interface a hosting backend must implement. A provider is
+// the host/API you authenticate against (Fal, Meshy); the generator you run is
+// the model, selected per request via GenerateRequest.Model and enumerated by
+// Models (e.g. Fal hosts hunyuan3d, pixal3d, tripo, rodin).
 type Provider interface {
 	Name() string
+	// DefaultModel is the model used when a request names none.
 	DefaultModel() string
+	// Models lists the model names this provider offers, for help and validation.
+	Models() []string
 	// APIKeyEnv is the environment variable this provider's key is read from.
 	APIKeyEnv() string
 	// APIKeyURL is where a user can obtain an API key.
@@ -39,8 +45,9 @@ type Provider interface {
 	// Submit fires a job and returns a provider job ID without waiting, for
 	// fire-and-forget use. Some inputs may not support it (returns an error).
 	Submit(ctx context.Context, req *GenerateRequest) (jobID string, err error)
-	// Fetch waits for an already-submitted job (by ID) and returns the model.
-	Fetch(ctx context.Context, apiKey, jobID string) (*GenerateResponse, error)
+	// Fetch waits for an already-submitted job (by ID) and returns the model. The
+	// model name is needed to route the request (e.g. Fal's per-model app base).
+	Fetch(ctx context.Context, apiKey, model, jobID string) (*GenerateResponse, error)
 }
 
 var registry = map[string]Provider{}

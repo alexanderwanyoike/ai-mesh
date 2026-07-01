@@ -34,19 +34,20 @@ var rootCmd = &cobra.Command{
 	Long: `ai-mesh generates 3D meshes (GLB) from a text prompt or a reference image.
 It downloads the result from the provider and writes it to a file.
 
-Providers:
-  fal      - Tencent Hunyuan3D 3.1 on Fal, image-to-3d only (requires FAL_API_KEY)
-  pixal3d  - TencentARC Pixal3D on Fal, image-to-3d only (requires FAL_API_KEY)
-  tripo    - Tripo v2.5 on Fal, image-to-3d only (requires FAL_API_KEY)
-  rodin    - Hyper3D Rodin on Fal, image-to-3d only (requires FAL_API_KEY)
-  meshy    - Meshy, text-to-3d and image-to-3d (requires MESHY_API_KEY)
+A provider (-p) is the host you authenticate against; the model (-m) is the
+generator it runs. Providers and their models:
+  fal    - image-to-3d, requires FAL_API_KEY. Models:
+             hunyuan3d (default), hunyuan3d-rapid, pixal3d, tripo, rodin
+  meshy  - text-to-3d and image-to-3d, requires MESHY_API_KEY. Models:
+             meshy-5 (default), meshy-6, latest
 
-The fal, pixal3d, tripo, and rodin providers are all hosted on Fal and share
-one FAL_API_KEY.
+Fal is a hosting platform: it runs Tencent's Hunyuan3D, TencentARC's Pixal3D,
+VAST's Tripo, and Deemos' Rodin behind one FAL_API_KEY.
 
 Compose it with ai-img for text -> image -> mesh:
   ai-img "a stone golem" -o golem.png && ai-mesh -i golem.png -o golem.glb`,
 	Example: `  ai-mesh -i character.png -o character.glb
+  ai-mesh -p fal -m tripo -i character.png -o character.glb
   ai-mesh -p meshy "a low-poly treasure chest" -o chest.glb
   ai-mesh -i sketch.png --faces 100000 --pbr -o sketch.glb`,
 	Args: cobra.MaximumNArgs(1),
@@ -60,8 +61,8 @@ Compose it with ai-img for text -> image -> mesh:
 }
 
 func init() {
-	rootCmd.Flags().StringVarP(&providerName, "provider", "p", "fal", "provider to use: fal, pixal3d, tripo, rodin, meshy")
-	rootCmd.Flags().StringVarP(&model, "model", "m", "", "model name/ID (defaults per provider)")
+	rootCmd.Flags().StringVarP(&providerName, "provider", "p", "fal", "provider (host) to use: fal, meshy")
+	rootCmd.Flags().StringVarP(&model, "model", "m", "", "model within the provider (fal: hunyuan3d, pixal3d, tripo, rodin)")
 	rootCmd.Flags().StringVarP(&output, "output", "o", "output.glb", "output file path")
 	rootCmd.Flags().StringVarP(&input, "input", "i", "", "input image for image-to-3d")
 	rootCmd.Flags().IntVar(&faces, "faces", 50000, "target face/polygon count")
@@ -124,8 +125,14 @@ func run(prompt string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(os.Stderr, "Submitted %s job %s. Fetch it when ready:\n  ai-mesh fetch %s %s -o %s\n",
-			p.Name(), id, p.Name(), id, output)
+		// Echo -m in the fetch hint so the job routes to the right model (Fal uses
+		// a per-model app base for fetch-by-id).
+		modelFlag := ""
+		if model != "" {
+			modelFlag = " -m " + model
+		}
+		fmt.Fprintf(os.Stderr, "Submitted %s job %s. Fetch it when ready:\n  ai-mesh fetch %s %s%s -o %s\n",
+			p.Name(), id, p.Name(), id, modelFlag, output)
 		fmt.Println(id)
 		return nil
 	}

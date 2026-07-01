@@ -4,20 +4,20 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 )
 
-func TestTripoGenerateUsesModelMesh(t *testing.T) {
-	// Tripo returns its GLB under model_mesh.url, so this also exercises the
-	// falGLBURL fallback to model_mesh.
+// -m tripo routes to the Tripo endpoint; Tripo also returns its GLB under
+// model_mesh.url, exercising the falGLBURL fallback.
+func TestFalTripoModel(t *testing.T) {
 	srv, auth, payload := falMoreServer(t, "/tripo3d/tripo/v2.5/image-to-3d", "model_mesh")
 	defer srv.Close()
 
-	tr := &Tripo{falQueue{HTTPClient: srv.Client(), BaseURL: srv.URL}}
-	resp, err := tr.Generate(context.Background(), &GenerateRequest{
+	f := &Fal{falQueue{HTTPClient: srv.Client(), BaseURL: srv.URL}}
+	resp, err := f.Generate(context.Background(), &GenerateRequest{
 		APIKey:     "test-key",
+		Model:      "tripo",
 		InputImage: []byte("imagebytes"),
 		InputMIME:  "image/png",
 		FaceCount:  40000,
@@ -40,27 +40,13 @@ func TestTripoGenerateUsesModelMesh(t *testing.T) {
 	}
 }
 
-func TestTripoRejectsTextOnly(t *testing.T) {
-	_, err := (&Tripo{}).Generate(context.Background(), &GenerateRequest{APIKey: "k", Prompt: "a dragon"})
-	if err == nil || !strings.Contains(err.Error(), "image-to-3d only") {
-		t.Errorf("expected image-to-3d-only error, got %v", err)
-	}
-}
-
-func TestTripoRequiresKey(t *testing.T) {
-	_, err := (&Tripo{}).Generate(context.Background(), &GenerateRequest{InputImage: []byte("x")})
-	if err == nil || !strings.Contains(err.Error(), "no API key") {
-		t.Errorf("expected missing-key error, got %v", err)
-	}
-}
-
-func TestTripoFetchByID(t *testing.T) {
+// Fetch-by-id derives the app base from the model's endpoint; for tripo that is
+// tripo3d/tripo (not the full versioned model path).
+func TestFalTripoFetchByID(t *testing.T) {
 	pollInterval = time.Millisecond
 
 	var srvURL string
 	mux := http.NewServeMux()
-	// Fetch reconstructs .../{appBase}/requests/{id}; for Tripo the app base is
-	// tripo3d/tripo (not the full versioned model path).
 	mux.HandleFunc("/tripo3d/tripo/requests/job-9/status", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"status": "COMPLETED"})
 	})
@@ -73,8 +59,8 @@ func TestTripoFetchByID(t *testing.T) {
 	defer srv.Close()
 	srvURL = srv.URL
 
-	tr := &Tripo{falQueue{HTTPClient: srv.Client(), BaseURL: srv.URL}}
-	resp, err := tr.Fetch(context.Background(), "k", "job-9")
+	f := &Fal{falQueue{HTTPClient: srv.Client(), BaseURL: srv.URL}}
+	resp, err := f.Fetch(context.Background(), "k", "tripo", "job-9")
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}

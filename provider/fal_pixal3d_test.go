@@ -6,13 +6,15 @@ import (
 	"testing"
 )
 
-func TestPixal3DGenerate(t *testing.T) {
+// -m pixal3d routes the Fal provider to the Pixal3D endpoint and payload.
+func TestFalPixal3DModel(t *testing.T) {
 	srv, auth, payload := falMoreServer(t, "/fal-ai/pixal3d", "model_glb")
 	defer srv.Close()
 
-	p := &Pixal3D{falQueue{HTTPClient: srv.Client(), BaseURL: srv.URL}}
-	resp, err := p.Generate(context.Background(), &GenerateRequest{
+	f := &Fal{falQueue{HTTPClient: srv.Client(), BaseURL: srv.URL}}
+	resp, err := f.Generate(context.Background(), &GenerateRequest{
 		APIKey:     "test-key",
+		Model:      "pixal3d",
 		InputImage: []byte("imagebytes"),
 		InputMIME:  "image/png",
 		FaceCount:  100000,
@@ -34,19 +36,5 @@ func TestPixal3DGenerate(t *testing.T) {
 	}
 	if (*payload)["decimation_target"].(float64) != 100000 {
 		t.Errorf("decimation_target = %v, want 100000", (*payload)["decimation_target"])
-	}
-}
-
-func TestPixal3DRejectsTextOnly(t *testing.T) {
-	_, err := (&Pixal3D{}).Generate(context.Background(), &GenerateRequest{APIKey: "k", Prompt: "a dragon"})
-	if err == nil || !strings.Contains(err.Error(), "image-to-3d only") {
-		t.Errorf("expected image-to-3d-only error, got %v", err)
-	}
-}
-
-func TestPixal3DRequiresKey(t *testing.T) {
-	_, err := (&Pixal3D{}).Generate(context.Background(), &GenerateRequest{InputImage: []byte("x")})
-	if err == nil || !strings.Contains(err.Error(), "no API key") {
-		t.Errorf("expected missing-key error, got %v", err)
 	}
 }
