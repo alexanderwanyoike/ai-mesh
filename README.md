@@ -2,7 +2,7 @@
 
 A multi-provider CLI for generating 3D meshes (GLB) from text or images with AI.
 
-Supports [Fal](https://fal.ai/) (Tencent Hunyuan3D 3.1) and [Meshy](https://www.meshy.ai/) out of the box, with a clean provider interface for adding more. Built to be scripted, batched, and called by agents - one mesh per invocation, the output path on stdout, progress on stderr.
+Supports [Fal](https://fal.ai/) (Hunyuan3D 3.1, Pixal3D, Tripo, Rodin) and [Meshy](https://www.meshy.ai/) out of the box, with a clean provider interface for adding more. Built to be scripted, batched, and called by agents - one mesh per invocation, the output path on stdout, progress on stderr.
 
 It is the mesh half of a composable pair with [ai-img](https://github.com/alexanderwanyoike/ai-img): `ai-img` turns a prompt into an image, `ai-mesh` turns an image into a mesh.
 
@@ -41,7 +41,13 @@ export MESHY_API_KEY="your-key-here"   # for meshy
 ai-mesh -i character.png -o character.glb
 ```
 
-3. Generate a mesh from a text prompt (Meshy):
+3. Pick a different model on the same host with `-m`:
+
+```bash
+ai-mesh -p fal -m tripo -i character.png -o character.glb
+```
+
+4. Generate a mesh from a text prompt (Meshy):
 
 ```bash
 ai-mesh -p meshy "a low-poly treasure chest" -o chest.glb
@@ -74,6 +80,11 @@ The config file is stored at `~/.ai-mesh/config.json` with `0600` permissions.
 | Fal      | `FAL_API_KEY`   | [Fal dashboard](https://fal.ai/dashboard/keys) |
 | Meshy    | `MESHY_API_KEY` | [Meshy API](https://www.meshy.ai/api) |
 
+A **provider** (`-p`) is the host you authenticate against; the **model** (`-m`)
+is the generator it runs. Fal is a hosting platform - it runs several third-party
+models (`hunyuan3d`, `pixal3d`, `tripo`, `rodin`) behind one `FAL_API_KEY`. So you
+authenticate once per host, then switch models freely with `-m`.
+
 ### Managing stored keys
 
 ```bash
@@ -97,8 +108,8 @@ is downloaded and written to the `--output` path; the path is echoed to stdout.
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--provider` | `-p` | `fal` | Provider: `fal`, `meshy` |
-| `--model` | `-m` | per-provider | Model name/ID or endpoint |
+| `--provider` | `-p` | `fal` | Provider (host): `fal`, `meshy` |
+| `--model` | `-m` | per-provider | Model within the provider (fal: `hunyuan3d`/`pixal3d`/`tripo`/`rodin`) |
 | `--output` | `-o` | `output.glb` | Output file path |
 | `--input` | `-i` | | Input image for image-to-3d |
 | `--api-key` | `-k` | | API key (overrides env var and config) |
@@ -107,25 +118,40 @@ is downloaded and written to the `--output` path; the path is echoed to stdout.
 | `--no-wait` | | `false` | Submit the job, print its ID, and exit (don't block) |
 | `--timeout` | | `30` | Minutes to wait for a job before giving up |
 
-## Providers
+## Providers and models
 
-### Fal (default) - image-to-3d
+`-p` picks the host you authenticate against; `-m` picks the model it runs.
 
-Tencent Hunyuan3D 3.1, hosted on Fal. Image input only; a bare text prompt returns
-a hint to pass an image or use Meshy.
+```bash
+ai-mesh -i x.png                    # fal + hunyuan3d (the defaults)
+ai-mesh -p fal -m tripo -i x.png    # a different model on the same host
+ai-mesh -p meshy -m meshy-6 "chest" # a different host
+```
 
-| Model (`-m`) | Description |
-|--------------|-------------|
-| `fal-ai/hunyuan-3d/v3.1/pro/image-to-3d` (default) | High quality, up to 1.5M faces |
-| `fal-ai/hunyuan-3d/v3.1/rapid/image-to-3d` | Faster / cheaper |
+### Fal (default host) - image-to-3d
 
-### Meshy - text-to-3d and image-to-3d
+Requires `FAL_API_KEY`. Fal is a hosting platform that re-runs several
+third-party models. Image input only; a bare text prompt returns a hint to pass
+an image or use Meshy.
 
-Image input runs Meshy's single-stage image-to-3d. A text prompt runs the
-two-stage text-to-3d (preview geometry, then refine with texture).
+| Model (`-m`) | Origin | Notes |
+|--------------|--------|-------|
+| `hunyuan3d` (default) | Tencent | High quality, up to 1.5M faces. `--faces`, `--pbr`. |
+| `hunyuan3d-rapid` | Tencent | Faster / cheaper tier. |
+| `pixal3d` | TencentARC | Pixel-aligned. `--faces` -> decimation target; `--pbr` n/a. |
+| `tripo` | VAST | Fast, strong geometry. `--faces` -> face limit; `--pbr`. |
+| `rodin` | Deemos | Premium. `--pbr` -> PBR else Shaded; `--faces` n/a (quality tiers). |
 
-| Model (`-m`) | Description |
-|--------------|-------------|
+Advanced: `-m` also accepts a raw Fal endpoint id (e.g.
+`-m fal-ai/some-model/image-to-3d`) as a passthrough for models not listed here.
+
+### Meshy (host) - text-to-3d and image-to-3d
+
+Requires `MESHY_API_KEY`. Image input runs Meshy's single-stage image-to-3d; a
+text prompt runs the two-stage text-to-3d (preview geometry, then refine).
+
+| Model (`-m`) | Notes |
+|--------------|-------|
 | `meshy-5` (default) | Meshy 5 |
 | `meshy-6` | Meshy 6 |
 | `latest` | Newest available |
@@ -170,13 +196,15 @@ queue before compute even begins. Two things help:
   the result whenever it's ready with `fetch` (free - no re-generation):
 
 ```bash
-id=$(ai-mesh -p fal -i hero.png --no-wait)
+id=$(ai-mesh -p fal -m tripo -i hero.png --no-wait)
 # ... do other work ...
-ai-mesh fetch fal "$id" -o hero.glb
+ai-mesh fetch fal "$id" -m tripo -o hero.glb
 ```
 
-`--no-wait` works for the single-stage paths (Fal, Meshy image-to-3d). Meshy
-text-to-3d is two-stage and always runs synchronously.
+Pass the same `-m` to `fetch` as you submitted with - Fal routes fetch-by-id
+through a per-model app base. `--no-wait` prints the exact `fetch` command
+(with `-m`) to copy. It works for the single-stage paths (Fal, Meshy
+image-to-3d); Meshy text-to-3d is two-stage and always runs synchronously.
 
 ## Development
 

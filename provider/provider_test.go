@@ -6,17 +6,29 @@ import (
 )
 
 func TestRegistry(t *testing.T) {
-	if got := List(); !reflect.DeepEqual(got, []string{"fal", "meshy"}) {
-		t.Errorf("List() = %v, want [fal meshy]", got)
+	// Providers are hosts (fal, meshy); models (hunyuan3d, tripo, ...) are chosen
+	// per request, not registered as top-level providers.
+	want := []string{"fal", "meshy"}
+	if got := List(); !reflect.DeepEqual(got, want) {
+		t.Errorf("List() = %v, want %v", got, want)
 	}
-	if Get("fal") == nil {
-		t.Error("Get(fal) = nil")
-	}
-	if Get("meshy") == nil {
-		t.Error("Get(meshy) = nil")
+	for _, name := range want {
+		if Get(name) == nil {
+			t.Errorf("Get(%q) = nil", name)
+		}
 	}
 	if Get("nope") != nil {
 		t.Error("Get(nope) should be nil")
+	}
+}
+
+func TestFalModels(t *testing.T) {
+	want := []string{"hunyuan3d", "hunyuan3d-rapid", "pixal3d", "tripo", "rodin"}
+	if got := (&Fal{}).Models(); !reflect.DeepEqual(got, want) {
+		t.Errorf("Fal.Models() = %v, want %v", got, want)
+	}
+	if def := (&Fal{}).DefaultModel(); def != "hunyuan3d" {
+		t.Errorf("Fal.DefaultModel() = %q, want hunyuan3d", def)
 	}
 }
 

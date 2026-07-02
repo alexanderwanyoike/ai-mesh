@@ -22,6 +22,8 @@ func (m *Meshy) DefaultModel() string { return meshyDefaultModel }
 func (m *Meshy) APIKeyEnv() string    { return "MESHY_API_KEY" }
 func (m *Meshy) APIKeyURL() string    { return "https://www.meshy.ai/api" }
 
+func (m *Meshy) Models() []string { return []string{"meshy-5", "meshy-6", "latest"} }
+
 func (m *Meshy) httpClient() *http.Client {
 	if m.HTTPClient != nil {
 		return m.HTTPClient
@@ -114,8 +116,9 @@ func (m *Meshy) Generate(ctx context.Context, req *GenerateRequest) (*GenerateRe
 }
 
 // Fetch waits for an already-submitted Meshy task (by ID) and returns the
-// result. It auto-detects image-to-3d (v1) vs text-to-3d (v2) tasks.
-func (m *Meshy) Fetch(ctx context.Context, apiKey, taskID string) (*GenerateResponse, error) {
+// result. It auto-detects image-to-3d (v1) vs text-to-3d (v2) tasks, so the
+// model arg is unused.
+func (m *Meshy) Fetch(ctx context.Context, apiKey, model, taskID string) (*GenerateResponse, error) {
 	if apiKey == "" {
 		return nil, fmt.Errorf("no API key provided for meshy")
 	}

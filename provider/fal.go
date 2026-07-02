@@ -2,180 +2,115 @@ package provider
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
-	"net/http"
+	"strings"
 )
 
 func init() { Register(&Fal{}) }
 
-const falDefaultModel = "fal-ai/hunyuan-3d/v3.1/pro/image-to-3d"
-
-// falAppBase is the queue "app" all ai-mesh Fal models share. Fal's per-request
-// endpoints live here (e.g. .../fal-ai/hunyuan-3d/requests/{id}), not under the
-// full versioned model path, so fetch-by-id reconstructs URLs from it.
-const falAppBase = "fal-ai/hunyuan-3d"
-
-// Fal implements Provider using Fal's queue API (Tencent Hunyuan3D 3.1).
-// It is image-to-3d only.
-type Fal struct {
-	HTTPClient *http.Client // overridable for tests
-	BaseURL    string       // overridable for tests; default https://queue.fal.run
+// falModel is one 3D model hosted on the Fal provider: the queue endpoint it
+// submits to and how it builds its request payload (each model - Hunyuan3D,
+// Pixal3D, Tripo, Rodin - takes different fields). The fetch-by-id app base is
+// derived from the endpoint (see falAppBase).
+type falModel struct {
+	name     string
+	endpoint string
+	payload  func(req *GenerateRequest) (map[string]any, error)
 }
 
+// falModels is the set of models the Fal provider hosts, in display order. Fal is
+// a hosting platform: it re-hosts Tencent's Hunyuan3D, TencentARC's Pixal3D,
+// VAST's Tripo, and Deemos' Rodin, all behind one FAL_API_KEY. Select one with
+// -m; the default is hunyuan3d.
+var falModels = []falModel{
+	{"hunyuan3d", "fal-ai/hunyuan-3d/v3.1/pro/image-to-3d", falHunyuanPayload},
+	{"hunyuan3d-rapid", "fal-ai/hunyuan-3d/v3.1/rapid/image-to-3d", falHunyuanPayload},
+	{"pixal3d", "fal-ai/pixal3d", falPixal3DPayload},
+	{"tripo", "tripo3d/tripo/v2.5/image-to-3d", falTripoPayload},
+	{"rodin", "fal-ai/hyper3d/rodin", falRodinPayload},
+}
+
+// Fal implements Provider as a hosting platform: one FAL_API_KEY, many models
+// (image-to-3d only). The model is chosen per request via -m.
+type Fal struct{ falQueue }
+
 func (f *Fal) Name() string         { return "fal" }
-func (f *Fal) DefaultModel() string { return falDefaultModel }
+func (f *Fal) DefaultModel() string { return "hunyuan3d" }
 func (f *Fal) APIKeyEnv() string    { return "FAL_API_KEY" }
 func (f *Fal) APIKeyURL() string    { return "https://fal.ai/dashboard/keys" }
 
-func (f *Fal) httpClient() *http.Client {
-	if f.HTTPClient != nil {
-		return f.HTTPClient
+func (f *Fal) Models() []string {
+	names := make([]string, len(falModels))
+	for i, m := range falModels {
+		names[i] = m.name
 	}
-	return http.DefaultClient
+	return names
 }
 
-func (f *Fal) baseURL() string {
-	if f.BaseURL != "" {
-		return f.BaseURL
+// resolveModel maps a -m value to a Fal model. Empty uses the default; a known
+// friendly name (hunyuan3d, pixal3d, ...) maps to its endpoint; a value with a
+// "/" is treated as a raw Fal endpoint id (advanced passthrough, Hunyuan-style
+// payload).
+func (f *Fal) resolveModel(name string) (falModel, error) {
+	if name == "" {
+		name = f.DefaultModel()
 	}
-	return "https://queue.fal.run"
+	for _, m := range falModels {
+		if m.name == name {
+			return m, nil
+		}
+	}
+	if strings.Contains(name, "/") {
+		return falModel{name: name, endpoint: name, payload: falHunyuanPayload}, nil
+	}
+	return falModel{}, fmt.Errorf("unknown fal model %q (available: %s, or a raw fal-ai/... endpoint)",
+		name, strings.Join(f.Models(), ", "))
 }
 
-type falSubmitResponse struct {
-	RequestID   string `json:"request_id"`
-	StatusURL   string `json:"status_url"`
-	ResponseURL string `json:"response_url"`
-}
-
-type falStatusResponse struct {
-	Status string `json:"status"`
-}
-
-type falFile struct {
-	URL string `json:"url"`
-}
-
-type falResult struct {
-	ModelGLB  falFile `json:"model_glb"`
-	ModelURLs struct {
-		GLB falFile `json:"glb"`
-	} `json:"model_urls"`
-	Seed int `json:"seed"`
-}
-
-// submit posts the job and returns Fal's queue handles.
-func (f *Fal) submit(ctx context.Context, req *GenerateRequest) (falSubmitResponse, error) {
-	var submit falSubmitResponse
+// buildRequest validates the request and resolves the model + payload. The
+// image-to-3d and key checks are shared across all Fal models.
+func (f *Fal) buildRequest(req *GenerateRequest) (string, map[string]any, error) {
 	if req.APIKey == "" {
-		return submit, fmt.Errorf("no API key provided for fal")
+		return "", nil, fmt.Errorf("no API key provided for fal")
 	}
 	if req.InputImage == nil {
-		return submit, fmt.Errorf("fal is image-to-3d only: pass an image with -i, pipe one from ai-img, or use -p meshy for text-to-3d")
+		return "", nil, fmt.Errorf("fal is image-to-3d only: pass an image with -i, pipe one from ai-img, or use -p meshy for text-to-3d")
 	}
-
-	model := req.Model
-	if model == "" {
-		model = f.DefaultModel()
+	m, err := f.resolveModel(req.Model)
+	if err != nil {
+		return "", nil, err
 	}
-	payload := map[string]any{
-		"input_image_url": dataURI(req.InputImage, req.InputMIME),
-		"enable_pbr":      req.PBR,
+	payload, err := m.payload(req)
+	if err != nil {
+		return "", nil, err
 	}
-	if req.FaceCount > 0 {
-		payload["face_count"] = req.FaceCount
-	}
-
-	if err := postJSON(ctx, f.httpClient(), f.baseURL()+"/"+model, falKeyHeader(req.APIKey), payload, &submit); err != nil {
-		return submit, fmt.Errorf("submitting job: %w", err)
-	}
-	if submit.RequestID == "" {
-		return submit, fmt.Errorf("fal submit returned no request id")
-	}
-	return submit, nil
+	return m.endpoint, payload, nil
 }
 
-// Submit fires a job and returns its request ID (for --no-wait / fetch).
 func (f *Fal) Submit(ctx context.Context, req *GenerateRequest) (string, error) {
-	s, err := f.submit(ctx, req)
+	endpoint, payload, err := f.buildRequest(req)
+	if err != nil {
+		return "", err
+	}
+	s, err := f.submit(ctx, req.APIKey, endpoint, payload)
 	if err != nil {
 		return "", err
 	}
 	return s.RequestID, nil
 }
 
-// Generate submits and waits for the result.
 func (f *Fal) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
-	s, err := f.submit(ctx, req)
+	endpoint, payload, err := f.buildRequest(req)
 	if err != nil {
 		return nil, err
 	}
-	if s.StatusURL == "" || s.ResponseURL == "" {
-		return nil, fmt.Errorf("fal submit returned no queue URLs")
-	}
-	return f.await(ctx, req.APIKey, s.StatusURL, s.ResponseURL)
+	return f.run(ctx, req.APIKey, endpoint, payload)
 }
 
-// Fetch waits for an already-submitted job (by request ID) and returns the result.
-func (f *Fal) Fetch(ctx context.Context, apiKey, requestID string) (*GenerateResponse, error) {
-	if apiKey == "" {
-		return nil, fmt.Errorf("no API key provided for fal")
-	}
-	base := f.baseURL() + "/" + falAppBase + "/requests/" + requestID
-	return f.await(ctx, apiKey, base+"/status", base)
-}
-
-// await polls statusURL until COMPLETED, then downloads the GLB from responseURL.
-func (f *Fal) await(ctx context.Context, apiKey, statusURL, responseURL string) (*GenerateResponse, error) {
-	headers := falKeyHeader(apiKey)
-
-	if err := poll(ctx, func() (bool, error) {
-		var status falStatusResponse
-		if err := getJSON(ctx, f.httpClient(), statusURL, headers, &status); err != nil {
-			return false, fmt.Errorf("polling status: %w", err)
-		}
-		switch status.Status {
-		case "COMPLETED":
-			return true, nil
-		case "IN_QUEUE", "IN_PROGRESS":
-			return false, nil
-		default:
-			return false, fmt.Errorf("fal job in unexpected state %q", status.Status)
-		}
-	}); err != nil {
-		return nil, err
-	}
-
-	var result falResult
-	if err := getJSON(ctx, f.httpClient(), responseURL, headers, &result); err != nil {
-		return nil, fmt.Errorf("fetching result: %w", err)
-	}
-
-	// Prefer the dedicated GLB url. model_glb is polymorphic - on some tiers
-	// (e.g. rapid) it can point at an OBJ - whereas model_urls.glb is always GLB.
-	url := result.ModelURLs.GLB.URL
-	if url == "" {
-		url = result.ModelGLB.URL
-	}
-	if url == "" {
-		return nil, fmt.Errorf("fal response had no GLB URL")
-	}
-
-	data, err := download(ctx, f.httpClient(), url)
+func (f *Fal) Fetch(ctx context.Context, apiKey, model, requestID string) (*GenerateResponse, error) {
+	m, err := f.resolveModel(model)
 	if err != nil {
 		return nil, err
 	}
-	return &GenerateResponse{ModelData: data, Format: "glb", URL: url}, nil
-}
-
-func falKeyHeader(apiKey string) map[string]string {
-	return map[string]string{"Authorization": "Key " + apiKey}
-}
-
-// dataURI encodes image bytes as a base64 data URI accepted by Fal and Meshy.
-func dataURI(image []byte, mime string) string {
-	if mime == "" {
-		mime = "image/png"
-	}
-	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(image)
+	return f.fetch(ctx, apiKey, falAppBase(m.endpoint), requestID)
 }
